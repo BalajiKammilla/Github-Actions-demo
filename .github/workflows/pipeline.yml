@@ -1,0 +1,56 @@
+name: CI
+on:
+  push:
+    branches:
+      - master     
+  pull_request:
+    branches: 
+      - master
+jobs:
+  ci-cd:
+    name: Jar to Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: check out master
+        uses: actions/checkout@v4
+
+      - name: setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: turmine
+          version: 21
+      - name: setup gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the application
+        run: ./gradlew build
+
+      - name: Test the application
+        run: ./gradlew test
+
+      - name: build docker image
+        run: docker build -t ${{secrets.DOCKER_USERNAME}}/my-app:latest .
+
+      - name: login into docker
+        uses: docker/docker-action@v3
+        with:
+          username: ${{secrets.DOCKERHUB_USERNAME}}
+          password: ${{secrets.DOCKERHUB_TOKEN}}
+
+      - name: psuh docker image
+        run: docker push ${{secrets.DOCKERHUB_USERNAME}}/my-app:lastest
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-actions@v1.2.0
+        with:
+          host: ${{secrets.EC2_HOST}}
+          username: ${{secrets.EC2_USERNAME}}\
+          key: ${{secrets.EC2_KEY}}
+          script: |
+            docker pull ${{secrets.DOCKERHUB_USERNAME}}/my-app:latest
+            docker stop my-app || true
+            docker rm my-app || true
+            docker run -d --name my-app -p 8080:8080 ${{secrets.DOCKERHUB_USERNAME}}/my-app:latest
+            
+        
+  
