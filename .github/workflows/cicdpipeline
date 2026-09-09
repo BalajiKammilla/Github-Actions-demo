@@ -1,0 +1,54 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+job:
+  name: CICD pipeline
+  runs-on: ubuntu-latest
+  steps:
+    name: checkout master
+    uses: actions/checkout@v4
+
+  - name: setup JDK
+    uses: action/setup-java@v5
+    with:
+      distribution: termine
+      version: 21
+
+  - name: setup gradle
+    uses: gradle/actions/setup-gradle@v4
+
+  - name: build application
+    run: ./gradlew build
+
+  - name: test application
+    run: ./gradlew test
+
+  - name: build docker image
+    run: docker build -t ${{secrets.DOCKER_USERNAME}}/my-app:latest .
+
+  - name: login to docker 
+    uses: docker/docker-action@v3
+    with:
+      username: ${{secrets.DOCKER_USERNAME}}
+      password: ${{secrets.DOCKER_PASSWORD}}
+
+  - name: push to docker
+    run: docker push ${{secrets.DOCKER_USERNAME}}/my-app:latest
+
+  - name: deploy to EC2
+    uses: appleboy/ssh-ec2@v1.0.2
+    with:
+      username:${{secrets.EC2_USERNAME}}
+      host: ${{secrets.EC2_HOST}}
+      key: ${{secrets.EC2_KEY}}
+      script: |
+        docker pull ${{secrets.DOCKER_USERNAME}}/my-app:latest
+        docker stop my-app || true
+        docker rm my-app || true
+        docker run -d --name my-app -p 8080:8080 ${{secrets.DOCKER_USERNAME}}/my-app:latest 
+    
